@@ -1,36 +1,55 @@
+<!-- src/routes/+page.svelte -->
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import type { Point, Line, PieceType, Player, GamePhase, GameState } from '$lib/types';
+	// Import state and reset function
+	import { gameState, resetGame } from '$lib/gameState.svelte';
+	// Import types
+	import type { Point, Line } from '$lib/types';
+	// Import components and logic
 	import Board from '$lib/components/Board.svelte';
 	import {
 		buildAdjacencyMap,
-		getAdjacentPoints, // Keep if needed directly here, maybe not
 		calculateValidTigerMoves,
 		calculateValidGoatMoves,
 		executeTigerMove,
-		executeGoatMove,
-		getPointCoords // Keep point generation here for now
+		executeGoatMove
+		// getPointCoords // Not needed here anymore if generation is local
 	} from '$lib/gameLogic';
+	// Import constants
+	import {
+		SVG_BOARD_SIZE,
+		SVG_POINT_OFFSET,
+		SVG_POINT_DISTANCE,
+		BOARD_DIMENSIONS,
+		PLAYER_TYPES,
+		GAME_PHASES,
+		TOTAL_GOATS,
+		BOARD_COLOR,
+		FONT_FAMILY, // Needed for status display
+		LINE_COLOR
+	} from '$lib/constants';
 
-	// --- Constants and Static Data Generation ---
-	const boardSize: number = 500;
+	// --- Static Data Generation ---
 	const points: Point[] = [];
 	const lines: Line[] = [];
 
 	// Point Generation
-	for (let y = 0; y < 5; y++) {
-		for (let x = 0; x < 5; x++) {
-			points.push({ id: y * 5 + x, x: 50 + x * 100, y: 50 + y * 100 });
+	for (let y = 0; y < BOARD_DIMENSIONS; y++) {
+		for (let x = 0; x < BOARD_DIMENSIONS; x++) {
+			points.push({
+				id: y * BOARD_DIMENSIONS + x,
+				x: SVG_POINT_OFFSET + x * SVG_POINT_DISTANCE,
+				y: SVG_POINT_OFFSET + y * SVG_POINT_DISTANCE
+			});
 		}
 	}
-	// Line Generation (using getPointCoords defined within this script for now)
+	// Line Generation
 	function getCoordsForLines(x: number, y: number): Point | null {
-		// Local version for init
-		if (x < 0 || x > 4 || y < 0 || y > 4) return null;
-		return points[y * 5 + x];
+		if (x < 0 || x >= BOARD_DIMENSIONS || y < 0 || y >= BOARD_DIMENSIONS) return null;
+		return points[y * BOARD_DIMENSIONS + x];
 	}
-	for (let y = 0; y < 5; y++) {
-		for (let x = 0; x < 5; x++) {
+	for (let y = 0; y < BOARD_DIMENSIONS; y++) {
+		for (let x = 0; x < BOARD_DIMENSIONS; x++) {
 			const start = getCoordsForLines(x, y);
 			if (!start) continue;
 			const right = getCoordsForLines(x + 1, y);
@@ -45,33 +64,10 @@
 				lines.push({ x1: start.x, y1: start.y, x2: diag2.x, y2: diag2.y });
 		}
 	}
-	// --- End Constants and Data Generation ---
+	// --- End Static Data Generation ---
 
-	// --- Adjacency Map (will be built in onMount) ---
-	// Use a regular Map now, as it's built once and passed around.
-	// No need for $state unless the map itself needed to be reactive to changes.
 	let adjacencyMap = new Map<number, number[]>();
 
-	// --- Game State ---
-	const initialBoard: PieceType[] = Array(25).fill(null);
-	initialBoard[0] = 'TIGER';
-	initialBoard[4] = 'TIGER';
-	initialBoard[20] = 'TIGER';
-	initialBoard[24] = 'TIGER';
-
-	let gameState = $state<GameState>({
-		board: [...initialBoard], // Use spread to avoid modifying initialBoard later if resetting
-		turn: 'GOAT',
-		phase: 'PLACEMENT',
-		goatsPlaced: 0,
-		goatsCaptured: 0,
-		winner: null,
-		selectedPieceId: null,
-		validMoves: []
-	});
-	// --- End Game State ---
-
-	// --- Lifecycle ---
 	onMount(() => {
 		// Build adjacency map once the component is mounted
 		adjacencyMap = buildAdjacencyMap(lines, points);
@@ -79,47 +75,40 @@
 
 	// --- Event Handlers Orchestration ---
 	function onPointClick(pointId: number) {
-		console.log(`Page received click for point: ${pointId}`);
-		if (gameState.winner) return;
+		if (gameState.winner || !adjacencyMap.size) return; // Don't process clicks if game over or map not ready
 
-		if (gameState.turn === 'GOAT') {
+		if (gameState.turn === PLAYER_TYPES.GOAT) {
 			handleGoatTurn(pointId);
-		} else if (gameState.turn === 'TIGER') {
+		} else if (gameState.turn === PLAYER_TYPES.TIGER) {
 			handleTigerTurn(pointId);
 		}
 	}
 
 	function handleGoatTurn(pointId: number): void {
-		if (gameState.phase === 'PLACEMENT') {
+		if (gameState.phase === GAME_PHASES.PLACEMENT) {
 			if (gameState.board[pointId] !== null) return;
-			// Direct state mutation is fine because it's $state
-			gameState.board[pointId] = 'GOAT';
+			gameState.board[pointId] = PLAYER_TYPES.GOAT;
 			gameState.goatsPlaced += 1;
-			if (gameState.goatsPlaced >= 20) gameState.phase = 'MOVEMENT';
-			gameState.turn = 'TIGER';
+			if (gameState.goatsPlaced >= TOTAL_GOATS) gameState.phase = GAME_PHASES.MOVEMENT;
+			gameState.turn = PLAYER_TYPES.TIGER;
 			gameState.selectedPieceId = null;
 			gameState.validMoves = [];
 		} else {
-			// Movement
+			// Movement Phase
 			const clickedPiece = gameState.board[pointId];
 			if (gameState.selectedPieceId === null) {
-				// Selecting a goat
-				if (clickedPiece === 'GOAT') {
+				if (clickedPiece === PLAYER_TYPES.GOAT) {
 					gameState.selectedPieceId = pointId;
 					gameState.validMoves = calculateValidGoatMoves(pointId, gameState, adjacencyMap);
 				}
 			} else {
-				// Goat selected, attempting move or deselect
 				if (pointId === gameState.selectedPieceId) {
-					// Deselect
 					gameState.selectedPieceId = null;
 					gameState.validMoves = [];
-				} else if (clickedPiece === 'GOAT') {
-					// Select other goat
+				} else if (clickedPiece === PLAYER_TYPES.GOAT) {
 					gameState.selectedPieceId = pointId;
 					gameState.validMoves = calculateValidGoatMoves(pointId, gameState, adjacencyMap);
 				} else if (clickedPiece === null && gameState.validMoves.includes(pointId)) {
-					// Execute move
 					executeGoatMove(gameState.selectedPieceId, pointId, gameState, points, adjacencyMap);
 				}
 			}
@@ -129,8 +118,7 @@
 	function handleTigerTurn(pointId: number): void {
 		const clickedPiece = gameState.board[pointId];
 		if (gameState.selectedPieceId === null) {
-			// Selecting a tiger
-			if (clickedPiece === 'TIGER') {
+			if (clickedPiece === PLAYER_TYPES.TIGER) {
 				gameState.selectedPieceId = pointId;
 				const { validDestinationIds } = calculateValidTigerMoves(
 					pointId,
@@ -141,13 +129,10 @@
 				gameState.validMoves = validDestinationIds;
 			}
 		} else {
-			// Tiger selected, attempting move/deselect
 			if (pointId === gameState.selectedPieceId) {
-				// Deselect
 				gameState.selectedPieceId = null;
 				gameState.validMoves = [];
-			} else if (clickedPiece === 'TIGER') {
-				// Select other tiger
+			} else if (clickedPiece === PLAYER_TYPES.TIGER) {
 				gameState.selectedPieceId = pointId;
 				const { validDestinationIds } = calculateValidTigerMoves(
 					pointId,
@@ -157,29 +142,14 @@
 				);
 				gameState.validMoves = validDestinationIds;
 			} else if (clickedPiece === null && gameState.validMoves.includes(pointId)) {
-				// Execute move
 				executeTigerMove(gameState.selectedPieceId, pointId, gameState, points, adjacencyMap);
 			}
 		}
 	}
 	// --- End Event Handlers ---
-
-	// --- Reset Function ---
-	function resetGame() {
-		console.log('Resetting game...');
-		// Use $state setters for deep reactivity if needed, but direct assignment works for top-level reset
-		gameState.board = [...initialBoard]; // Reset board
-		gameState.turn = 'GOAT';
-		gameState.phase = 'PLACEMENT';
-		gameState.goatsPlaced = 0;
-		gameState.goatsCaptured = 0;
-		gameState.winner = null;
-		gameState.selectedPieceId = null;
-		gameState.validMoves = [];
-	}
 </script>
 
-<main>
+<main style="--main-bg:{BOARD_COLOR}; --main-font:{FONT_FAMILY}; --header-color:{LINE_COLOR};">
 	<h1>Bagh Chal</h1>
 
 	<Board
@@ -190,24 +160,20 @@
 		validMoves={gameState.validMoves}
 		turn={gameState.turn}
 		phase={gameState.phase}
-		{boardSize}
+		boardSize={SVG_BOARD_SIZE}
 		{onPointClick}
 	/>
 
 	<div class="status">
 		<p>Turn: <strong>{gameState.turn}</strong></p>
 		<p>Phase: {gameState.phase}</p>
-		<p>Goats Placed: {gameState.goatsPlaced} / 20</p>
+		<p>Goats Placed: {gameState.goatsPlaced} / {TOTAL_GOATS}</p>
 		<p>Goats Captured: {gameState.goatsCaptured}</p>
 		{#if gameState.winner}
 			<p class="winner">{gameState.winner} Wins!</p>
-		{:else}
-			<!-- Add Restart Button -->
-			<button onclick={resetGame} style="margin-top: 15px;">Restart Game</button>
-		{/if}
-		{#if gameState.winner}
-			<!-- Also show Restart Button when game is over -->
 			<button onclick={resetGame} style="margin-top: 15px;">Play Again?</button>
+		{:else}
+			<button onclick={resetGame} style="margin-top: 15px;">Restart Game</button>
 		{/if}
 	</div>
 </main>
@@ -215,22 +181,49 @@
 <style>
 	main {
 		text-align: center;
-		font-family: sans-serif;
+		font-family: var(--main-font);
+		background-color: var(--main-bg);
+		padding: 1em;
+		min-height: 100vh;
+		color: #333;
+	}
+
+	h1 {
+		color: var(--header-color);
+		margin-bottom: 1em;
 	}
 	.status {
+		background-color: rgba(225, 225, 225, 0.8);
+		border-radius: 5px;
 		margin-top: 20px;
+		box-shadow: 2px 2px 5px rgba(0, 0, 0, 0.1);
+		color: #333;
 		padding: 10px;
 		border: 1px solid #ccc;
 		display: inline-block;
+		min-width: 150px; /* Ensure some width */
+		vertical-align: top; /* Align with board if needed */
+	}
+	.status p {
+		margin: 4px 0;
 	}
 	.winner {
 		font-size: 1.5rem;
 		color: green;
 		font-weight: bold;
+		margin-bottom: 10px;
 	}
 	button {
 		padding: 8px 15px;
 		font-size: 1rem;
 		cursor: pointer;
+		border: 1px solid #888;
+		border-radius: 4px;
+		background-color: #f0f0f0;
+		color: #333;
+		margin: 5px;
+	}
+	button:hover {
+		background-color: #e0e0e0;
 	}
 </style>
