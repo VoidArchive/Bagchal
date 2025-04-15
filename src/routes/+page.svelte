@@ -216,6 +216,7 @@
 				validDestinationIds.push(adjId);
 			}
 		}
+		gameState.validMoves = validDestinationIds;
 	}
 
 	function executeMove(fromId: number, toId: number): void {
@@ -251,9 +252,91 @@
 		}
 
 		gameState.turn = 'GOAT';
+
 		gameState.selectedPieceID = null;
 		gameState.validMoves = [];
 	}
+
+	function tigerHasAnyValidMoves(tigerId: number): boolean {
+		const adjacentIds = getAdjacentPoints(tigerId);
+
+		for (const adjId of adjacentIds) {
+			const pieceAtAdj = gameState.board[adjId];
+
+			if (pieceAtAdj === null) {
+				// Found a simple move
+				return true; // Tiger can move
+			} else if (pieceAtAdj === 'GOAT') {
+				// Check for capture possibility
+				const startPoint = points[tigerId];
+				const goatPoint = points[adjId];
+				if (!startPoint || !goatPoint) continue;
+
+				const pointsAdjacentToGoat = getAdjacentPoints(adjId);
+				for (const potentialDestId of pointsAdjacentToGoat) {
+					if (potentialDestId === tigerId) continue;
+
+					const destinationPoint = points[potentialDestId];
+					if (!destinationPoint) continue;
+
+					const isDestEmpty = gameState.board[potentialDestId] === null;
+
+					if (isDestEmpty) {
+						const dx_tiger_goat = goatPoint.x - startPoint.x;
+						const dy_tiger_goat = goatPoint.y - startPoint.y;
+						const dx_goat_dest = destinationPoint.x - goatPoint.x;
+						const dy_goat_dest = destinationPoint.y - goatPoint.y;
+						const isStraightLine = dx_tiger_goat === dx_goat_dest && dy_tiger_goat === dy_goat_dest;
+
+						if (isStraightLine) {
+							// Found a capture move
+							return true; // Tiger can move
+						}
+					}
+				}
+			}
+		}
+		// If we went through all adjacent points and found no simple moves or captures
+		return false; // This tiger is blocked
+	}
+
+	function executeGoatMove(fromId: number, toId: number): void {
+		if (gameState.board[toId] !== null || gameState.board[fromId] !== 'GOAT') {
+			console.error('Invalid state for goat move execution');
+			return;
+		}
+
+		gameState.board[toId] = 'GOAT';
+		gameState.board[fromId] = null;
+
+		let allTigersBlocked = true; // Assume blocked initially
+		console.log('Checking if all tigers are now blocked...');
+		for (let i = 0; i < gameState.board.length; i++) {
+			if (gameState.board[i] === 'TIGER') {
+				if (tigerHasAnyValidMoves(i)) {
+					// Use the helper function
+					console.log(`  Tiger ${i} can still move. Game continues.`);
+					allTigersBlocked = false; // Found a tiger that can move
+					break; // No need to check other tigers
+				} else {
+					console.log(`  Tiger ${i} is blocked.`);
+				}
+			}
+		}
+
+		if (allTigersBlocked) {
+			gameState.winner = 'GOAT';
+			console.log('GOATS WIN! All Tigers are blocked.');
+		}
+		// --- End Goat Win Condition Check ---
+
+		if (!gameState.winner) {
+			gameState.turn = 'TIGER';
+		}
+		gameState.selectedPieceID = null;
+		gameState.validMoves = [];
+	}
+
 	function handlePointClick(pointId: number) {
 		if (gameState.winner) return;
 
@@ -283,17 +366,21 @@
 				if (clickedPiece === 'GOAT') {
 					gameState.selectedPieceID = pointId;
 					// calculate valid goat moves
+					calculateValidGoatMoves(pointId);
 				}
 			} else {
 				if (pointId === gameState.selectedPieceID) {
 					gameState.selectedPieceID = null;
 					gameState.validMoves = [];
-					console.log('deselected Goat');
 				} else if (clickedPiece === 'GOAT') {
 					//
 					gameState.selectedPieceID = pointId;
+					calculateValidGoatMoves(pointId);
 				} else if (clickedPiece === null) {
 					//attempting to move.
+					if (gameState.validMoves.includes(pointId)) {
+						executeGoatMove(gameState.selectedPieceID, pointId);
+					}
 				}
 			}
 		}
@@ -373,9 +460,12 @@
 					cy={point.y}
 					r="12"
 					fill="dodgerblue"
-					stroke="black"
-					stroke-width="2"
-					style="cursor:pointer;"
+					stroke={isSelected && gameState.turn === 'GOAT' ? 'lime' : 'black'}
+					stroke-width={isSelected && gameState.turn === 'GOAT' ? 4 : 2}
+					class="piece goat"
+					style:cursor={gameState.phase === 'MOVEMENT' && gameState.turn === 'GOAT'
+						? 'pointer'
+						: 'default'}
 				/>
 			{:else}
 				<!-- svelte-ignore a11y_click_events_have_key_events -->
