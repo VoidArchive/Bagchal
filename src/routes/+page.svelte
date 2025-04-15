@@ -28,6 +28,11 @@
 		validMoves: number[];
 	}
 
+	interface CaptureInfo {
+		destinationId: number;
+		jumpedGoatId: number;
+	}
+
 	const boardSize: number = 500;
 	const points: Point[] = [];
 	const lines: Line[] = [];
@@ -91,27 +96,237 @@
 		validMoves: []
 	});
 
-	function handlePointClick(pointId: number) {
-		// console.log(`Clicked point: ${pointId}`);
-		if (
-			gameState.turn === 'GOAT' &&
-			gameState.phase === 'PLACEMENT' &&
-			gameState.board[pointId] === null &&
-			gameState.goatsPlaced < 20
-		) {
-			gameState.board[pointId] = 'GOAT';
-			gameState.goatsPlaced++;
+	const adjacencyMap = $state(new Map<number, number[]>());
 
-			if (gameState.goatsPlaced === 20) {
+	function buildAdjacencyMap() {
+		adjacencyMap.clear();
+		for (const line of lines) {
+			const p1 = points.find((p) => p.x === line.x1 && p.y === line.y1);
+			const p2 = points.find((p) => p.x === line.x2 && p.y === line.y2);
+
+			if (p1 && p2) {
+				const list1 = adjacencyMap.get(p1.id) ?? [];
+				const list2 = adjacencyMap.get(p2.id) ?? [];
+				if (!list1.includes(p2.id)) list1.push(p2.id);
+				if (!list2.includes(p1.id)) list2.push(p1.id);
+				adjacencyMap.set(p1.id, list1);
+				adjacencyMap.set(p2.id, list2);
+			}
+		}
+		console.log('Adjacency map built: ', adjacencyMap);
+	}
+
+	// call this is onmount. for now here to check
+	buildAdjacencyMap();
+
+	function getAdjacentPoints(pointId: number): number[] {
+		return adjacencyMap.get(pointId) ?? [];
+	}
+
+	function calculateValidTigerMoves(tigerId: number) {
+		const validDestinationIds: number[] = [];
+		const validCaptureInfos: CaptureInfo[] = [];
+		gameState.validMoves = [];
+		const adjacentIds = getAdjacentPoints(tigerId);
+		console.log(`Calculating moves for Tiger ${tigerId}. Adjacent:`, adjacentIds); // Log adjacent points
+
+		for (const adjId of adjacentIds) {
+			const pieceAtAdj = gameState.board[adjId];
+			console.log(`  Checking adjacent point ${adjId}. Piece: ${pieceAtAdj}`); // Log piece check
+
+			if (pieceAtAdj === null) {
+				console.log(`    Found simple move to ${adjId}`);
+				validDestinationIds.push(adjId);
+			} else if (pieceAtAdj === 'GOAT') {
+				console.log(`    --- Potential Capture ---`);
+				console.log(`    Tiger at ${tigerId}, Goat at ${adjId}`);
+				const startPoint = points[tigerId];
+				const goatPoint = points[adjId];
+
+				if (!startPoint || !goatPoint) continue;
+
+				// Find points adjacent to the GOAT
+				const pointsAdjacentToGoat = getAdjacentPoints(adjId);
+				console.log(`    Points adjacent to Goat ${adjId}:`, pointsAdjacentToGoat);
+
+				for (const potentialDestId of pointsAdjacentToGoat) {
+					console.log(`      Checking potential destination ${potentialDestId}`);
+					// Skip if the potential destination is the starting point itself
+					if (potentialDestId === tigerId) {
+						console.log(`        Skipping: Destination is the start point.`);
+						continue;
+					}
+
+					const destinationPoint = points[potentialDestId];
+					if (!destinationPoint) {
+						console.log(`        Skipping: Destination point object not found.`); // Should not happen
+						continue;
+					}
+
+					// Check if destination is empty
+					const isDestEmpty = gameState.board[potentialDestId] === null;
+					console.log(`        Is destination ${potentialDestId} empty? ${isDestEmpty}`);
+
+					if (isDestEmpty) {
+						// Check if the points form a straight line (Tiger -> Goat -> Destination)
+						// We can check this by comparing the differences in x and y coordinates
+						const dx_tiger_goat = goatPoint.x - startPoint.x;
+						const dy_tiger_goat = goatPoint.y - startPoint.y;
+						const dx_goat_dest = destinationPoint.x - goatPoint.x;
+						const dy_goat_dest = destinationPoint.y - goatPoint.y;
+
+						const isStraightLine = dx_tiger_goat === dx_goat_dest && dy_tiger_goat === dy_goat_dest;
+						console.log(
+							`        Is straight line (T:${tigerId} -> G:${adjId} -> D:${potentialDestId})? ${isStraightLine}`
+						);
+
+						if (isStraightLine) {
+							console.log(`        >>> Valid capture found! Destination: ${potentialDestId}`);
+							if (!validDestinationIds.includes(potentialDestId)) {
+								// Avoid duplicates if multiple paths lead there (unlikely)
+								validDestinationIds.push(potentialDestId);
+							}
+							// Find if already exists before pushing
+							const captureExists = validCaptureInfos.some(
+								(info) => info.destinationId === potentialDestId && info.jumpedGoatId === adjId
+							);
+							if (!captureExists) {
+								validCaptureInfos.push({ destinationId: potentialDestId, jumpedGoatId: adjId });
+							}
+						}
+					} else {
+						console.log(`        Destination ${potentialDestId} is not empty.`);
+					}
+				}
+				console.log(`    -------------------------`);
+			}
+		}
+		gameState.validMoves = validDestinationIds;
+		console.log(`Valid moves for tiger ${tigerId}:`, validDestinationIds);
+	}
+
+	function calculateValidGoatMoves(goatId: number): void {
+		const validDestinationIds: number[] = [];
+		gameState.validMoves = [];
+
+		const adjacentIds = getAdjacentPoints(goatId);
+
+		for (const adjId of adjacentIds) {
+			if (gameState.board[adjId] === null) {
+				validDestinationIds.push(adjId);
+			}
+		}
+	}
+
+	function executeMove(fromId: number, toId: number): void {
+		console.log(`Executing move from ${fromId} to ${toId}`);
+		const isCapture = !getAdjacentPoints(fromId).includes(toId); // Simple check: if not adjacent, must be capture
+
+		// Update board
+		gameState.board[toId] = 'TIGER';
+		gameState.board[fromId] = null;
+
+		if (isCapture) {
+			// Find the jumped goat
+			const startPoint = points[fromId];
+			const endPoint = points[toId];
+			const goatX = (startPoint.x + endPoint.x) / 2;
+			const goatY = (startPoint.y + endPoint.y) / 2;
+			const jumpedGoat = points.find((p) => p.x === goatX && p.y === goatY);
+
+			if (jumpedGoat && gameState.board[jumpedGoat.id] === 'GOAT') {
+				gameState.board[jumpedGoat.id] = null; // Remove goat
+				gameState.goatsCaptured += 1;
+				console.log(`Captured goat at ${jumpedGoat.id}`);
+
+				// --- Check Win Condition ---
+				if (gameState.goatsCaptured >= 5) {
+					gameState.winner = 'TIGER';
+					console.log('TIGERS WIN!');
+				}
+			} else {
+				// This shouldn't happen if calculateValidTigerMoves is correct, but good to log
+				console.error('Capture move detected, but no goat found at expected position.');
+			}
+		}
+
+		gameState.turn = 'GOAT';
+		gameState.selectedPieceID = null;
+		gameState.validMoves = [];
+	}
+	function handlePointClick(pointId: number) {
+		if (gameState.winner) return;
+
+		if (gameState.turn === 'GOAT') {
+			handleGoatTurn(pointId);
+		} else if (gameState.turn === 'TIGER') {
+			handleTigerTurn(pointId);
+		}
+	}
+
+	function handleGoatTurn(pointId: number): void {
+		if (gameState.phase === 'PLACEMENT') {
+			if (gameState.board[pointId] !== null) return;
+			gameState.board[pointId] = 'GOAT';
+			gameState.goatsPlaced += 1;
+
+			if (gameState.goatsPlaced >= 20) {
 				gameState.phase = 'MOVEMENT';
 			}
-
 			gameState.turn = 'TIGER';
-
 			gameState.selectedPieceID = null;
 			gameState.validMoves = [];
 		} else {
-			console.log("Cannot place goat here or not goat's turn/phase.");
+			const clickedPiece = gameState.board[pointId];
+
+			if (gameState.selectedPieceID === null) {
+				if (clickedPiece === 'GOAT') {
+					gameState.selectedPieceID = pointId;
+					// calculate valid goat moves
+				}
+			} else {
+				if (pointId === gameState.selectedPieceID) {
+					gameState.selectedPieceID = null;
+					gameState.validMoves = [];
+					console.log('deselected Goat');
+				} else if (clickedPiece === 'GOAT') {
+					//
+					gameState.selectedPieceID = pointId;
+				} else if (clickedPiece === null) {
+					//attempting to move.
+				}
+			}
+		}
+	}
+
+	function handleTigerTurn(pointId: number): void {
+		const clickedPiece = gameState.board[pointId];
+
+		if (gameState.selectedPieceID == null) {
+			if (clickedPiece === 'TIGER') {
+				gameState.selectedPieceID = pointId;
+				// TODO: calculate valid move
+				calculateValidTigerMoves(pointId);
+			}
+		} else {
+			if (pointId === gameState.selectedPieceID) {
+				gameState.selectedPieceID = null;
+				gameState.validMoves = [];
+				console.log('Deselected Tiger');
+			} else if (clickedPiece === 'TIGER') {
+				gameState.selectedPieceID = pointId;
+				calculateValidTigerMoves(pointId);
+			} else {
+				console.log(
+					`Attempting to move selected tiger (${gameState.selectedPieceID}) to ${pointId}`
+				);
+				if (clickedPiece === null && gameState.validMoves.includes(pointId)) {
+					console.log(`Moving Tiger ${gameState.selectedPieceID} to ${pointId}`);
+					executeMove(gameState.selectedPieceID, pointId);
+				} else {
+					console.log(`Invalid move attempt from ${gameState.selectedPieceID} to ${pointId}`);
+				}
+			}
 		}
 	}
 </script>
@@ -134,6 +349,8 @@
 		<!-- Points -->
 		{#each points as point (point.id)}
 			{@const piece = gameState.board[point.id]}
+			{@const isSelected = point.id === gameState.selectedPieceID}
+			{@const isValidMove = gameState.validMoves.includes(point.id)}
 			{#if piece === 'TIGER'}
 				<!-- svelte-ignore a11y_click_events_have_key_events -->
 				<!-- svelte-ignore a11y_no_static_element_interactions -->
@@ -143,11 +360,13 @@
 					cy={point.y}
 					r="15"
 					fill="darkorange"
-					stroke="black"
-					stroke-width="2"
-					style="cursor:pointer;"
+					stroke={isSelected ? 'red' : 'black'}
+					stroke-width={isSelected ? 4 : 2}
+					class="piece tiger"
 				/>
 			{:else if piece === 'GOAT'}
+				<!-- svelte-ignore a11y_click_events_have_key_events -->
+				<!-- svelte-ignore a11y_no_static_element_interactions -->
 				<circle
 					onclick={() => handlePointClick(point.id)}
 					cx={point.x}
@@ -159,15 +378,17 @@
 					style="cursor:pointer;"
 				/>
 			{:else}
+				<!-- svelte-ignore a11y_click_events_have_key_events -->
+				<!-- svelte-ignore a11y_no_static_element_interactions -->
 				<circle
 					onclick={() => handlePointClick(point.id)}
 					cx={point.x}
 					cy={point.y}
-					r="8"
-					fill="white"
+					r={isValidMove ? 10 : 8}
+					fill={isValidMove ? 'lightcoral' : 'white'}
 					stroke="darkgray"
 					stroke-width="1"
-					style="cursor:pointer;"
+					class="empty-point"
 				/>
 			{/if}
 		{/each}
