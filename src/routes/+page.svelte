@@ -90,6 +90,30 @@
 		selectedPieceID: null,
 		validMoves: []
 	});
+
+	function handlePointClick(pointId: number) {
+		// console.log(`Clicked point: ${pointId}`);
+		if (
+			gameState.turn === 'GOAT' &&
+			gameState.phase === 'PLACEMENT' &&
+			gameState.board[pointId] === null &&
+			gameState.goatsPlaced < 20
+		) {
+			gameState.board[pointId] = 'GOAT';
+			gameState.goatsPlaced++;
+
+			if (gameState.goatsPlaced === 20) {
+				gameState.phase = 'MOVEMENT';
+			}
+
+			gameState.turn = 'TIGER';
+
+			gameState.selectedPieceID = null;
+			gameState.validMoves = [];
+		} else {
+			console.log("Cannot place goat here or not goat's turn/phase.");
+		}
+	}
 </script>
 
 <main>
@@ -111,25 +135,40 @@
 		{#each points as point (point.id)}
 			{@const piece = gameState.board[point.id]}
 			{#if piece === 'TIGER'}
+				<!-- svelte-ignore a11y_click_events_have_key_events -->
+				<!-- svelte-ignore a11y_no_static_element_interactions -->
 				<circle
+					onclick={() => handlePointClick(point.id)}
 					cx={point.x}
 					cy={point.y}
 					r="15"
 					fill="darkorange"
 					stroke="black"
 					stroke-width="2"
+					style="cursor:pointer;"
 				/>
 			{:else if piece === 'GOAT'}
 				<circle
+					onclick={() => handlePointClick(point.id)}
 					cx={point.x}
 					cy={point.y}
 					r="12"
 					fill="dodgerblue"
 					stroke="black"
 					stroke-width="2"
+					style="cursor:pointer;"
 				/>
 			{:else}
-				<circle cx={point.x} cy={point.y} r="8" fill="white" stroke="darkgray" stroke-width="1" />
+				<circle
+					onclick={() => handlePointClick(point.id)}
+					cx={point.x}
+					cy={point.y}
+					r="8"
+					fill="white"
+					stroke="darkgray"
+					stroke-width="1"
+					style="cursor:pointer;"
+				/>
 			{/if}
 		{/each}
 	</svg>
@@ -149,5 +188,18 @@
 	main {
 		text-align: center;
 		font-family: sans-serif;
+	}
+
+	.status {
+		margin-top: 20px;
+		padding: 10px;
+		border: 1px solid #ccc;
+		display: inline-block;
+	}
+
+	.winner {
+		font-size: 1.5rem;
+		color: green;
+		font-weight: bold;
 	}
 </style>
