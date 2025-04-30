@@ -40,3 +40,17 @@ pnpm dev            # http://localhost:5173
 # 4. Build for production
 pnpm build
 pnpm preview
+
+
+🛣️ Roadmap
+
+Status	Item
+🔜	Undo / redo stack
+🔜	Basic AI opponent (minimax w/ alpha-beta)
+🔜	Drag-&-drop support on mobile
+🧭	Online multiplayer (WebSockets + Supabase Realtime)
+🧭	Thematic “Bagchal • Reforged” skin with mythic lore
+🧭	Accessibility pass (ARIA, keyboard controls)
+🧭	PWA packaging & offline support
+🧭	Save / resume games via localStorage
+
