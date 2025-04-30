@@ -54,3 +54,12 @@ Status	Item
 🧭	PWA packaging & offline support
 🧭	Save / resume games via localStorage
 
+
+🤝 Contributing
+Fork & clone, create a feature branch.
+
+Follow the coding style (ESLint + Prettier).
+
+Submit a descriptive PR – the maintainer will review.
+
+All contributions – code, bug reports, suggestions – are welcome!
