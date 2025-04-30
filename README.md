@@ -32,7 +32,7 @@ git clone https://github.com/<your-org>/bagchal.git
 cd bagchal
 
 # 2. Install dependencies
-pnpm install        # or npm / yarn
+pnpm install        
 
 # 3. Run the dev server
 pnpm dev            # http://localhost:5173
@@ -40,9 +40,9 @@ pnpm dev            # http://localhost:5173
 # 4. Build for production
 pnpm build
 pnpm preview
+```
 
-
-🛣️ Roadmap
+## 🛣️ Roadmap
 
 Status	Item
 🔜	Undo / redo stack
