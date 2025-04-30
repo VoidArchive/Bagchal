@@ -1,38 +1,42 @@
-# sv
 
-Everything you need to build a Svelte project, powered by [`sv`](https://github.com/sveltejs/cli).
+# Bagchal 🦬🐯  
+*MVP – April 2025*
 
-## Creating a project
+Bagchal (Nepali : **बाघचाल**) is the classic “Tigers & Goats” strategy game.  
+This repository contains the **minimum-viable product** that lets two local players play a complete round inside the browser.
 
-If you're seeing this, you've probably already done this step. Congrats!
+---
 
-```bash
-# create a new project in the current directory
-npx sv create
+## ✨ MVP Features
 
-# create a new project in my-app
-npx sv create my-app
-```
+| Area | Details |
+|------|---------|
+| Core rules | 5 × 5 intersection board, 4 tigers begin in the corners, 20 goats are placed sequentially, legal movement & captures enforced |
+| Phases | **Placement** (goats only) → **Movement** (both sides) |
+| Turn logic | Turn indicator, phase indicator, counters for goats placed & goats captured |
+| UI | Responsive board with drag / click & drop, light animation, green gradient background (Tailwind CSS) |
+| Game loop | “New Game” button hard-resets state |
+| Tech stack | **SvelteKit + TypeScript + Tailwind CSS** (Vite build) |
 
-## Developing
+<p align="center">
+  <img alt="Bagchal MVP Screenshot" src="static/bagchal-mvp.png" width="450">
+</p>
 
-Once you've created a project and installed dependencies with `npm install` (or `pnpm install` or `yarn`), start a development server:
+---
 
-```bash
-npm run dev
-
-# or start the server and open the app in a new browser tab
-npm run dev -- --open
-```
-
-## Building
-
-To create a production version of your app:
+## 🚀 Quick Start
 
 ```bash
-npm run build
-```
+# 1. Clone
+git clone https://github.com/<your-org>/bagchal.git
+cd bagchal
 
-You can preview the production build with `npm run preview`.
+# 2. Install dependencies
+pnpm install        # or npm / yarn
 
-> To deploy your app, you may need to install an [adapter](https://svelte.dev/docs/kit/adapters) for your target environment.
+# 3. Run the dev server
+pnpm dev            # http://localhost:5173
+
+# 4. Build for production
+pnpm build
+pnpm preview
